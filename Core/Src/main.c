@@ -70,7 +70,9 @@ uint32_t recording_size = 0;
 uint32_t played_size = 0;
 
 
-CallBack_Result_t callback_result = UNKNOWN;
+volatile CallBack_Result_t callback_result = UNKNOWN;
+volatile uint8_t dma_half_ready = 0;
+volatile uint8_t dma_full_ready = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -256,7 +258,7 @@ int main(void)
 	  printf("successfully mounted\r\n");
   }
 
-  fresult = f_open(&fil, "r.wav", FA_OPEN_EXISTING | FA_READ);
+  fresult = f_open(&fil, "a.wav", FA_OPEN_EXISTING | FA_READ);
   if (fresult != FR_OK){
 	  // do something
 	  printf("could not read file, fresult is %d \r\n", fresult);
@@ -322,20 +324,33 @@ int main(void)
 //	  HAL_Delay(500);
 
 
+//	  if (callback_result == FULL_COMPLETED){
+//		  f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
+//		  played_size += 32000;
+//		  printf("                              callback result full completed -> unknown\r\n");
+//		  callback_result = UNKNOWN;
+//	  }
+//
+//	  if (callback_result == HALF_COMPLETED){
+//		  f_read(&fil, &samples[0], 32000, (UINT *) fread_size);
+//		  printf("    callback result half completed -> unknown \r\n");
+//		  callback_result = UNKNOWN;
+//	  }
+	    if (dma_half_ready) {
+	        dma_half_ready = 0;  // clear flag
+	        f_read(&fil, samples, 32000, &fread_size);
+	        printf("Main: processed HALF\n");
+	    }
+
+	    if (dma_full_ready) {
+	        dma_full_ready = 0;  // clear flag
+	        f_read(&fil, &samples[16000], 32000, &fread_size);
+	        played_size += 32000;
+	        printf("Main: processed FULL\n");
+	    }
 
 
-	  if (callback_result == HALF_COMPLETED){
-		  f_read(&fil, &samples[0], 32000, (UINT *) fread_size);
-		  printf("callback result half completed -> unknown \r\n");
-		  callback_result = UNKNOWN;
-	  }
 
-	  if (callback_result == FULL_COMPLETED){
-		  f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
-		  played_size += 32000;
-		  printf("callback result full completed -> unknown\r\n");
-		  callback_result = UNKNOWN;
-	  }
 
 
 
@@ -561,7 +576,10 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s){
-	callback_result = HALF_COMPLETED;
+	dma_half_ready = 1;
+//	callback_result = HALF_COMPLETED;
+
+	printf("HALF callback\r\n");
 
 }
 
@@ -570,8 +588,10 @@ void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s){
 void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s){
 
 	// whenever called, 32000 samples already got played
-	callback_result = FULL_COMPLETED;
+//	callback_result = FULL_COMPLETED;
+	dma_full_ready = 1;
 	played_size += 32000;
+	printf("FULL callback\r\n");
 }
 
 /* USER CODE END 4 */
