@@ -31,6 +31,12 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+typedef enum {
+	UNKNOWN,
+	HALF_COMPLETED,
+	FULL_COMPLETED
+}  CallBack_Result_t;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -44,20 +50,40 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2S_HandleTypeDef hi2s2;
+DMA_HandleTypeDef hdma_spi2_tx;
+
 SPI_HandleTypeDef hspi1;
 
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
+FATFS fatfs;
+FIL fil;
+FRESULT fresult;
+
+int16_t samples[32000];
+
+uint32_t fread_size = 0;
+uint32_t recording_size = 0;
+uint32_t played_size = 0;
+
+
+CallBack_Result_t callback_result = UNKNOWN;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_I2S2_Init(void);
 /* USER CODE BEGIN PFP */
+
+void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s);
+void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s);
 
 /* USER CODE END PFP */
 
@@ -69,10 +95,90 @@ int _write(int file, char *ptr, int len) {
     return len;
 }
 
-uint8_t BSP_SD_IsDetected(void){
-	__IO uint8_t status = 1;
+void testSDCard(void){
 
-	return status;
+	  printf("\r\n~ SD card demo by kiwih ~\r\n\r\n");
+
+	  HAL_Delay(1000); //a short delay is important to let the SD card settle
+
+	  //some variables for FatFs
+	  FATFS FatFs; 	//Fatfs handle
+	  FIL fil; 		//File handle
+	  FRESULT fres; //Result after operations
+
+	  //Open the file system
+	  fres = f_mount(&FatFs, "", 1); //1=mount now
+	  if (fres != FR_OK) {
+		printf("f_mount error (%i)\r\n", fres);
+		while(1);
+	  }
+
+	  //Let's get some statistics from the SD card
+	  DWORD free_clusters, free_sectors, total_sectors;
+
+	  FATFS* getFreeFs;
+
+	  fres = f_getfree("", &free_clusters, &getFreeFs);
+	  if (fres != FR_OK) {
+		printf("f_getfree error (%i)\r\n", fres);
+		while(1);
+	  }
+
+	  //Formula comes from ChaN's documentation
+	  total_sectors = (getFreeFs->n_fatent - 2) * getFreeFs->csize;
+	  free_sectors = free_clusters * getFreeFs->csize;
+
+	  printf("SD card stats:\r\n%10lu KiB total drive space.\r\n%10lu KiB available.\r\n", total_sectors / 2, free_sectors / 2);
+
+	  //Now let's try to open file "test.txt"
+	  fres = f_open(&fil, "write.txt", FA_READ);
+	  if (fres != FR_OK) {
+		printf("f_open error (%i)\r\n", fres);
+		while(1);
+	  }
+	  printf("I was able to open 'write.txt' for reading!\r\n");
+
+	  //Read 30 bytes from "test.txt" on the SD card
+	  BYTE readBuf[30];
+
+	  //We can either use f_read OR f_gets to get data out of files
+	  //f_gets is a wrapper on f_read that does some string formatting for us
+	  TCHAR* rres = f_gets((TCHAR*)readBuf, 30, &fil);
+	  if(rres != 0) {
+		printf("Read string from 'write.txt' contents: %s\r\n", readBuf);
+	  } else {
+		printf("f_gets error (%i)\r\n", fres);
+	  }
+
+	  //Be a tidy kiwi - don't forget to close your file!
+	  f_close(&fil);
+
+	  //Now let's try and write a file "write.txt"
+	  fres = f_open(&fil, "write.txt", FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
+	  if(fres == FR_OK) {
+		printf("I was able to open 'write.txt' for writing\r\n");
+	  } else {
+		printf("f_open error (%i)\r\n", fres);
+	  }
+
+	  //Copy in a string
+	  strncpy((char*)readBuf, "a new file is made!", 19);
+	  UINT bytesWrote;
+	  fres = f_write(&fil, readBuf, 19, &bytesWrote);
+	  if(fres == FR_OK) {
+		printf("Wrote %i bytes to 'write.txt'!\r\n", bytesWrote);
+	  } else {
+		printf("f_write error (%i)\r\n", fres);
+	  }
+
+	  //Be a tidy kiwi - don't forget to close your file!
+	  f_close(&fil);
+
+	  //We're done, so de-mount the drive
+	  f_mount(NULL, "", 0);
+
+	  printf("DONE! \r\n");
+
 }
 
 
@@ -107,99 +213,98 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_SPI1_Init();
   MX_FATFS_Init();
+  MX_I2S2_Init();
   /* USER CODE BEGIN 2 */
 
-  char msg[] = "hello world!... \r\n";
-  HAL_UART_Transmit(&huart2, (const uint8_t*) msg, strlen(msg), HAL_MAX_DELAY);
+  printf("starting...\r\n");
+//  testSDCard();
 
-  printf("hello from print\r\n");
+  fresult = f_mount(&fatfs, "", 1);
 
+  if (fresult != FR_OK){
+	  // do something
+	  printf("there was an error with the mounting");
 
-
-  printf("\r\n~ SD card demo by kiwih ~\r\n\r\n");
-
-  HAL_Delay(1000); //a short delay is important to let the SD card settle
-
-  //some variables for FatFs
-  FATFS FatFs; 	//Fatfs handle
-  FIL fil; 		//File handle
-  FRESULT fres; //Result after operations
-
-  //Open the file system
-  fres = f_mount(&FatFs, "", 1); //1=mount now
-  if (fres != FR_OK) {
-	printf("f_mount error (%i)\r\n", fres);
-	while(1);
+  }
+  else{
+	  printf("successfully mounted\r\n");
   }
 
-  //Let's get some statistics from the SD card
-  DWORD free_clusters, free_sectors, total_sectors;
-
-  FATFS* getFreeFs;
-
-  fres = f_getfree("", &free_clusters, &getFreeFs);
-  if (fres != FR_OK) {
-	printf("f_getfree error (%i)\r\n", fres);
-	while(1);
+  fresult = f_open(&fil, "r.wav", FA_OPEN_EXISTING | FA_READ);
+  if (fresult != FR_OK){
+	  // do something
+	  printf("could not read file, fresult is %d \r\n", fresult);
+	  while (1);
+  }
+  else{
+	  printf("successfully opened file!\r\n");
   }
 
-  //Formula comes from ChaN's documentation
-  total_sectors = (getFreeFs->n_fatent - 2) * getFreeFs->csize;
-  free_sectors = free_clusters * getFreeFs->csize;
 
-  printf("SD card stats:\r\n%10lu KiB total drive space.\r\n%10lu KiB available.\r\n", total_sectors / 2, free_sectors / 2);
-
-  //Now let's try to open file "test.txt"
-  fres = f_open(&fil, "test.txt", FA_READ);
-  if (fres != FR_OK) {
-	printf("f_open error (%i)\r\n", fres);
-	while(1);
+  fresult = f_lseek(&fil, 40);
+  if (fresult != FR_OK){
+	  // do something
+	  printf("could not seek file, fresult is %d \r\n", fresult);
+	  while (1);
   }
-  printf("I was able to open 'test.txt' for reading!\r\n");
-
-  //Read 30 bytes from "test.txt" on the SD card
-  BYTE readBuf[30];
-
-  //We can either use f_read OR f_gets to get data out of files
-  //f_gets is a wrapper on f_read that does some string formatting for us
-  TCHAR* rres = f_gets((TCHAR*)readBuf, 30, &fil);
-  if(rres != 0) {
-	printf("Read string from 'test.txt' contents: %s\r\n", readBuf);
-  } else {
-	printf("f_gets error (%i)\r\n", fres);
+  else{
+	  printf("successfully seek within file!\r\n");
   }
 
-  //Be a tidy kiwi - don't forget to close your file!
-  f_close(&fil);
-
-  //Now let's try and write a file "write.txt"
-  fres = f_open(&fil, "write.txt", FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
-  if(fres == FR_OK) {
-	printf("I was able to open 'write.txt' for writing\r\n");
-  } else {
-	printf("f_open error (%i)\r\n", fres);
+  fresult = f_read(&fil, &recording_size, 4, (UINT *)fread_size);
+  if (fresult != FR_OK){
+	  // do something
+	  printf("could not read file, fresult is %d \r\n", fresult);
+	  while (1);
+  }
+  else{
+	  printf("successfully read file!\r\n");
   }
 
-  //Copy in a string
-  strncpy((char*)readBuf, "a new file is made!", 19);
-  UINT bytesWrote;
-  fres = f_write(&fil, readBuf, 19, &bytesWrote);
-  if(fres == FR_OK) {
-	printf("Wrote %i bytes to 'write.txt'!\r\n", bytesWrote);
-  } else {
-	printf("f_write error (%i)\r\n", fres);
+  fresult = f_read(&fil, samples, 64000, (UINT *)fread_size);
+  if (fresult != FR_OK){
+	  // do something
+	  printf("could read file part 2, fresult is %d \r\n", fresult);
+	  while (1);
+  }
+  else{
+	  printf("successfully read file part 2!\r\n");
   }
 
-  //Be a tidy kiwi - don't forget to close your file!
-  f_close(&fil);
+  recording_size /= 2;
 
-  //We're done, so de-mount the drive
-  f_mount(NULL, "", 0);
+  printf("============== done file operations!\r\n");
 
-  printf("DONE! \r\n");
+//  HAL_I2S_Transmit_DMA(&hi2s2, (uint16_t *)samples, 32000);
+
+
+  uint16_t test_buf[1000];
+  for (int i = 0; i < 1000; ++i) test_buf[i] = (i % 100) * 300; // simple ramp
+
+  HAL_StatusTypeDef result;
+
+  while (1){
+
+	  result = HAL_I2S_Transmit(&hi2s2, test_buf, 1000, HAL_MAX_DELAY);
+	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+
+	  if (result == HAL_OK){
+		  printf("I2S was okay \r\n");
+	  }
+
+	  else{
+		  printf("failed I2S communication\r\n");
+	  }
+	  HAL_Delay(1000);
+  }
+
+
+
+
 
   /* USER CODE END 2 */
 
@@ -208,8 +313,33 @@ int main(void)
   while (1)
   {
 
-	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-	  HAL_Delay(500);
+//	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+//	  HAL_Delay(500);
+
+
+
+
+//	  if (callback_result == HALF_COMPLETED){
+//		  f_read(&fil, samples, 32000, (UINT *) fread_size);
+//		  callback_result = UNKNOWN;
+//	  }
+//
+//	  if (callback_result == FULL_COMPLETED){
+//		  f_read(&fil, samples[16000], (UINT) 32000, (UINT *) fread_size);
+//		  callback_result = UNKNOWN;
+//	  }
+//
+//
+//
+//	  if (played_size >= recording_size){
+//		  HAL_I2S_DMAStop(&hi2s2);
+//		  printf("done \r\n");
+//		  break;
+//	  }
+
+
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -261,6 +391,40 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2S2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2S2_Init(void)
+{
+
+  /* USER CODE BEGIN I2S2_Init 0 */
+
+  /* USER CODE END I2S2_Init 0 */
+
+  /* USER CODE BEGIN I2S2_Init 1 */
+
+  /* USER CODE END I2S2_Init 1 */
+  hi2s2.Instance = SPI2;
+  hi2s2.Init.Mode = I2S_MODE_MASTER_TX;
+  hi2s2.Init.Standard = I2S_STANDARD_PHILIPS;
+  hi2s2.Init.DataFormat = I2S_DATAFORMAT_16B;
+  hi2s2.Init.MCLKOutput = I2S_MCLKOUTPUT_ENABLE;
+  hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_32K;
+  hi2s2.Init.CPOL = I2S_CPOL_LOW;
+  hi2s2.Init.ClockSource = I2S_CLOCK_PLL;
+  hi2s2.Init.FullDuplexMode = I2S_FULLDUPLEXMODE_ENABLE;
+  if (HAL_I2S_Init(&hi2s2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2S2_Init 2 */
+
+  /* USER CODE END I2S2_Init 2 */
+
 }
 
 /**
@@ -335,6 +499,22 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -371,6 +551,20 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s){
+	callback_result = HALF_COMPLETED;
+
+}
+
+
+
+void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s){
+
+	// whenever called, 32000 samples already got played
+	callback_result = FULL_COMPLETED;
+	played_size += 32000;
+}
 
 /* USER CODE END 4 */
 
