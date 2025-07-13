@@ -182,6 +182,28 @@ void testSDCard(void){
 }
 
 
+void test_speaker(void){
+	  uint16_t test_buf[1000];
+	  for (int i = 0; i < 1000; ++i) test_buf[i] = (i % 100) * 300; // simple ramp
+
+	  HAL_StatusTypeDef result;
+
+	  while (1){
+
+		  result = HAL_I2S_Transmit(&hi2s2, test_buf, 1000, HAL_MAX_DELAY);
+		  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+
+		  if (result == HAL_OK){
+			  printf("I2S was okay \r\n");
+		  }
+
+		  else{
+			  printf("failed I2S communication\r\n");
+		  }
+		  HAL_Delay(1000);
+	  }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -245,7 +267,7 @@ int main(void)
   }
 
 
-  fresult = f_lseek(&fil, 40);
+  fresult = f_lseek(&fil, 44);
   if (fresult != FR_OK){
 	  // do something
 	  printf("could not seek file, fresult is %d \r\n", fresult);
@@ -263,6 +285,7 @@ int main(void)
   }
   else{
 	  printf("successfully read file!\r\n");
+	  printf("the recording size is: %lu", recording_size);
   }
 
   fresult = f_read(&fil, samples, 64000, (UINT *)fread_size);
@@ -279,28 +302,10 @@ int main(void)
 
   printf("============== done file operations!\r\n");
 
-//  HAL_I2S_Transmit_DMA(&hi2s2, (uint16_t *)samples, 32000);
+  HAL_I2S_Transmit_DMA(&hi2s2, (uint16_t *)samples, 32000);
 
 
-  uint16_t test_buf[1000];
-  for (int i = 0; i < 1000; ++i) test_buf[i] = (i % 100) * 300; // simple ramp
 
-  HAL_StatusTypeDef result;
-
-  while (1){
-
-	  result = HAL_I2S_Transmit(&hi2s2, test_buf, 1000, HAL_MAX_DELAY);
-	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-
-	  if (result == HAL_OK){
-		  printf("I2S was okay \r\n");
-	  }
-
-	  else{
-		  printf("failed I2S communication\r\n");
-	  }
-	  HAL_Delay(1000);
-  }
 
 
 
@@ -319,23 +324,26 @@ int main(void)
 
 
 
-//	  if (callback_result == HALF_COMPLETED){
-//		  f_read(&fil, samples, 32000, (UINT *) fread_size);
-//		  callback_result = UNKNOWN;
-//	  }
-//
-//	  if (callback_result == FULL_COMPLETED){
-//		  f_read(&fil, samples[16000], (UINT) 32000, (UINT *) fread_size);
-//		  callback_result = UNKNOWN;
-//	  }
-//
-//
-//
-//	  if (played_size >= recording_size){
-//		  HAL_I2S_DMAStop(&hi2s2);
-//		  printf("done \r\n");
-//		  break;
-//	  }
+	  if (callback_result == HALF_COMPLETED){
+		  f_read(&fil, &samples[0], 32000, (UINT *) fread_size);
+		  printf("callback result half completed -> unknown \r\n");
+		  callback_result = UNKNOWN;
+	  }
+
+	  if (callback_result == FULL_COMPLETED){
+		  f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
+		  played_size += 32000;
+		  printf("callback result full completed -> unknown\r\n");
+		  callback_result = UNKNOWN;
+	  }
+
+
+
+	  if (played_size >= recording_size){
+		  HAL_I2S_DMAStop(&hi2s2);
+		  printf("done DMA transfer \r\n");
+		  break;
+	  }
 
 
 
