@@ -71,8 +71,6 @@ uint32_t played_size = 0;
 
 
 volatile CallBack_Result_t callback_result = UNKNOWN;
-volatile uint8_t half_ready = 0;
-volatile uint8_t full_ready = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -287,7 +285,7 @@ int main(void)
   }
   else{
 	  printf("successfully read file!\r\n");
-	  printf("the recording size is: %lu", recording_size);
+	  printf("the recording size is: %lu \r\n", recording_size);
   }
 
   fresult = f_read(&fil, samples, 64000, (UINT *)fread_size);
@@ -323,76 +321,36 @@ int main(void)
 //	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
 //	  HAL_Delay(500);
 
-//	    if (callback_result == HALF_COMPLETED) {
-//	        // refill first half of buffer
-//	    	f_read(&fil, &samples[0], 32000, (UINT *) fread_size);
-//
-//
-//	        printf("HALF         callback result half completed -> unknown \r\n");
-//	        callback_result = UNKNOWN;
-//	    }
-//	    if (callback_result == FULL_COMPLETED) {
-//	        // refill second half of buffer
-//	    	f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
-//
-//	        played_size += 32000;
-//	        printf("FULL           callback result full completed -> unknown\r\n");
-//
-//	        callback_result = UNKNOWN;
-//	    }
-//
-//	    if (played_size >= recording_size) {
-//	        HAL_I2S_DMAStop(&hi2s2);
-//	        printf("done DMA transfer \r\n");
-//	        break;
-//	    }
-
-	    if (half_ready) {
-	        half_ready = 0;
-	        UINT bytes_read = 0;
-	        f_read(&fil, &samples[0], 32000, &bytes_read);
-
-
-	        printf("half is ready, read %u bytes r\n", bytes_read);
-	    }
-
-	    if (full_ready) {
-	        full_ready = 0;
-	        UINT bytes_read = 0;
-	        f_read(&fil, &samples[16000], 32000, bytes_read);
-
-
-	        played_size += 64000;
-	        printf("full is ready, read %u bytes \r\n", fread_size);
-	    }
-
-	    if (played_size >= recording_size) {
-	        HAL_I2S_DMAStop(&hi2s2);
-	        printf("done DMA transfer\n");
-	        break;
-	    }
-
 
 	    // original video code
-//	  if (callback_result == FULL_COMPLETED){
+	  if (callback_result == FULL_COMPLETED){
+		  UINT bytesRead = 0;
+		  // finsihed transmitting I2S out of second half of array
+		  // so ready data into second half of array
+
 //		  f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
-//		  played_size += 32000;
-//		  printf("                              callback result full completed -> unknown\r\n");
-//		  callback_result = UNKNOWN;
-//	  }
-//
-//	  if (callback_result == HALF_COMPLETED){
+		  f_read(&fil, &samples[16000], 32000, bytesRead);
+		  played_size += 32000;
+		  printf("%u bytes, callback result full completed -> unknown \r\n", bytesRead);
+		  callback_result = UNKNOWN;
+	  }
+
+	  if (callback_result == HALF_COMPLETED){
+		  UINT bytesRead = 0;
+		  // finish transmitting I2S out of first half of array
+		  // so read data into first half of array
+		  f_read(&fil, &samples[0], 32000, bytesRead);
 //		  f_read(&fil, &samples[0], 32000, (UINT *) fread_size);
-//		  printf("    callback result half completed -> unknown \r\n");
-//		  callback_result = UNKNOWN;
-//	  }
-//
-//
-//	  if (played_size >= recording_size){
-//		  HAL_I2S_DMAStop(&hi2s2);
-//		  printf("done DMA transfer \r\n");
-//		  break;
-//	  }
+		  printf("%u bytes read, callback result half completed -> unknown \r\n", bytesRead);
+		  callback_result = UNKNOWN;
+	  }
+
+
+	  if (played_size >= recording_size){
+		  HAL_I2S_DMAStop(&hi2s2);
+		  printf("done DMA transfer \r\n");
+		  break;
+	  }
 
 
 
@@ -427,7 +385,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 8;
-  RCC_OscInitStruct.PLL.PLLN = 64;
+  RCC_OscInitStruct.PLL.PLLN = 84;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 7;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
@@ -470,7 +428,7 @@ static void MX_I2S2_Init(void)
   hi2s2.Init.Standard = I2S_STANDARD_PHILIPS;
   hi2s2.Init.DataFormat = I2S_DATAFORMAT_16B;
   hi2s2.Init.MCLKOutput = I2S_MCLKOUTPUT_ENABLE;
-  hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_32K;
+  hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_16K;
   hi2s2.Init.CPOL = I2S_CPOL_LOW;
   hi2s2.Init.ClockSource = I2S_CLOCK_PLL;
   hi2s2.Init.FullDuplexMode = I2S_FULLDUPLEXMODE_ENABLE;
@@ -507,7 +465,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -611,8 +569,8 @@ static void MX_GPIO_Init(void)
 
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s){
 	callback_result = HALF_COMPLETED;
-	half_ready = 1;
 	printf("HALF callback\r\n");
+
 
 }
 
@@ -621,10 +579,10 @@ void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s){
 void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s){
 
 	// whenever called, 32000 samples already got played
-	full_ready = 1;
 	callback_result = FULL_COMPLETED;
 	played_size += 32000;
 	printf("FULL callback\r\n");
+
 }
 
 /* USER CODE END 4 */
