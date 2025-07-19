@@ -51,7 +51,9 @@ typedef enum {
 
 /* Private variables ---------------------------------------------------------*/
 I2S_HandleTypeDef hi2s2;
+I2S_HandleTypeDef hi2s3;
 DMA_HandleTypeDef hdma_spi2_tx;
+DMA_HandleTypeDef hdma_spi3_rx;
 
 SPI_HandleTypeDef hspi1;
 
@@ -71,15 +73,21 @@ uint32_t played_size = 0;
 
 
 volatile CallBack_Result_t callback_result = UNKNOWN;
+
+
+int16_t data_i2s[100];
+volatile int16_t sample_i2s;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void PeriphCommonClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_I2S2_Init(void);
+static void MX_I2S3_Init(void);
 /* USER CODE BEGIN PFP */
 
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s);
@@ -94,6 +102,58 @@ int _write(int file, char *ptr, int len) {
     HAL_UART_Transmit(&huart2, (uint8_t*)ptr, len, HAL_MAX_DELAY);
     return len;
 }
+
+static FRESULT sd_result;
+static FATFS sdCard;
+static FIL testFile;
+void sd_card_init(void){
+	sd_result = f_mount(&sdCard, "", 1);
+
+	if (sd_result != 0){
+		printf("error in mounting sd card %d \r\n", sd_result);
+	}
+	else printf("success in mounting sd card\r\n");
+
+	uint8_t file_name[] = "test.txt";
+	uint8_t temp_number;
+	uint8_t test_text[] = "hello friends\r\n";
+
+	sd_result = f_open(&testFile, (void*)file_name, FA_WRITE | FA_CREATE_ALWAYS);
+	if (sd_result != 0){
+		printf("error in creating file: %d \r\n", sd_result);
+		while(1);
+	}
+	else printf("succeeded in opening file \r\n");
+
+	sd_result = f_write(&testFile, (void*)test_text, (UINT)sizeof(test_text), (UINT)&temp_number);
+
+	if (sd_result != 0){
+		printf("error writing to the file \r\n");
+		while (1);
+	}
+	else printf("successfully wrote to file \r\n");
+
+
+}
+
+
+void start_recording(uint32_t frequency){
+
+}
+
+
+void write2wave_file(uint8_t *data, uint16_t data_size){
+
+}
+
+
+void stop_recording(void){
+
+
+}
+
+
+
 
 void testSDCard(void){
 
@@ -204,6 +264,103 @@ void test_speaker(void){
 	  }
 }
 
+void SDcardPlaySetup(void){
+
+	  fresult = f_mount(&fatfs, "", 1);
+
+	  if (fresult != FR_OK){
+		  // do something
+		  printf("there was an error with the mounting");
+
+	  }
+	  else{
+		  printf("successfully mounted\r\n");
+	  }
+
+	  fresult = f_open(&fil, "a.wav", FA_OPEN_EXISTING | FA_READ);
+	  if (fresult != FR_OK){
+		  // do something
+		  printf("could not read file, fresult is %d \r\n", fresult);
+		  while (1);
+	  }
+	  else{
+		  printf("successfully opened file!\r\n");
+	  }
+
+
+	  fresult = f_lseek(&fil, 44);
+	  if (fresult != FR_OK){
+		  // do something
+		  printf("could not seek file, fresult is %d \r\n", fresult);
+		  while (1);
+	  }
+	  else{
+		  printf("successfully seek within file!\r\n");
+	  }
+
+	  fresult = f_read(&fil, &recording_size, 4, (UINT *)fread_size);
+	  if (fresult != FR_OK){
+		  // do something
+		  printf("could not read file, fresult is %d \r\n", fresult);
+		  while (1);
+	  }
+	  else{
+		  printf("successfully read file!\r\n");
+		  printf("the recording size is: %lu \r\n", recording_size);
+	  }
+
+	  fresult = f_read(&fil, samples, 64000, (UINT *)fread_size);
+	  if (fresult != FR_OK){
+		  // do something
+		  printf("could read file part 2, fresult is %d \r\n", fresult);
+		  while (1);
+	  }
+	  else{
+		  printf("successfully read file part 2!\r\n");
+	  }
+
+	  recording_size /= 2;
+
+	  printf("============== done file operations!\r\n");
+
+	  HAL_I2S_Transmit_DMA(&hi2s2, (uint16_t *)samples, 32000);
+}
+
+
+
+
+void handleSDCardPlayback(void){
+    // original video code
+  if (callback_result == FULL_COMPLETED){
+	  UINT bytesRead = 0;
+	  // finsihed transmitting I2S out of second half of array
+	  // so ready data into second half of array
+
+//		  f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
+	  f_read(&fil, &samples[16000], 32000, bytesRead);
+	  played_size += 32000;
+	  printf("%u bytes, callback result full completed -> unknown \r\n", bytesRead);
+	  callback_result = UNKNOWN;
+  }
+
+  if (callback_result == HALF_COMPLETED){
+	  UINT bytesRead = 0;
+	  // finish transmitting I2S out of first half of array
+	  // so read data into first half of array
+	  f_read(&fil, &samples[0], 32000, bytesRead);
+//		  f_read(&fil, &samples[0], 32000, (UINT *) fread_size);
+	  printf("%u bytes read, callback result half completed -> unknown \r\n", bytesRead);
+	  callback_result = UNKNOWN;
+  }
+
+
+  if (played_size >= recording_size){
+	  HAL_I2S_DMAStop(&hi2s2);
+	  printf("done DMA transfer \r\n");
+  }
+
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -229,6 +386,9 @@ int main(void)
   /* Configure the system clock */
   SystemClock_Config();
 
+  /* Configure the peripherals common clocks */
+  PeriphCommonClock_Config();
+
   /* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
@@ -240,74 +400,16 @@ int main(void)
   MX_SPI1_Init();
   MX_FATFS_Init();
   MX_I2S2_Init();
+  MX_I2S3_Init();
   /* USER CODE BEGIN 2 */
+
+  HAL_I2S_Receive_DMA(&hi2s3, (uint16_t*) data_i2s, sizeof(data_i2s)/2); // divide by 2 to get number of samples
+  HAL_Delay(500);
+  sd_card_init();
 
   printf("start...\r\n");
 //  testSDCard();
-
-  fresult = f_mount(&fatfs, "", 1);
-
-  if (fresult != FR_OK){
-	  // do something
-	  printf("there was an error with the mounting");
-
-  }
-  else{
-	  printf("successfully mounted\r\n");
-  }
-
-  fresult = f_open(&fil, "a.wav", FA_OPEN_EXISTING | FA_READ);
-  if (fresult != FR_OK){
-	  // do something
-	  printf("could not read file, fresult is %d \r\n", fresult);
-	  while (1);
-  }
-  else{
-	  printf("successfully opened file!\r\n");
-  }
-
-
-  fresult = f_lseek(&fil, 44);
-  if (fresult != FR_OK){
-	  // do something
-	  printf("could not seek file, fresult is %d \r\n", fresult);
-	  while (1);
-  }
-  else{
-	  printf("successfully seek within file!\r\n");
-  }
-
-  fresult = f_read(&fil, &recording_size, 4, (UINT *)fread_size);
-  if (fresult != FR_OK){
-	  // do something
-	  printf("could not read file, fresult is %d \r\n", fresult);
-	  while (1);
-  }
-  else{
-	  printf("successfully read file!\r\n");
-	  printf("the recording size is: %lu \r\n", recording_size);
-  }
-
-  fresult = f_read(&fil, samples, 64000, (UINT *)fread_size);
-  if (fresult != FR_OK){
-	  // do something
-	  printf("could read file part 2, fresult is %d \r\n", fresult);
-	  while (1);
-  }
-  else{
-	  printf("successfully read file part 2!\r\n");
-  }
-
-  recording_size /= 2;
-
-  printf("============== done file operations!\r\n");
-
-  HAL_I2S_Transmit_DMA(&hi2s2, (uint16_t *)samples, 32000);
-
-
-
-
-
+//  SDcardPlaySetup();
 
 
 
@@ -318,39 +420,11 @@ int main(void)
   while (1)
   {
 
-//	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-//	  HAL_Delay(500);
 
+//	  handleSDCardPlayback();
 
-	    // original video code
-	  if (callback_result == FULL_COMPLETED){
-		  UINT bytesRead = 0;
-		  // finsihed transmitting I2S out of second half of array
-		  // so ready data into second half of array
-
-//		  f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
-		  f_read(&fil, &samples[16000], 32000, bytesRead);
-		  played_size += 32000;
-		  printf("%u bytes, callback result full completed -> unknown \r\n", bytesRead);
-		  callback_result = UNKNOWN;
-	  }
-
-	  if (callback_result == HALF_COMPLETED){
-		  UINT bytesRead = 0;
-		  // finish transmitting I2S out of first half of array
-		  // so read data into first half of array
-		  f_read(&fil, &samples[0], 32000, bytesRead);
-//		  f_read(&fil, &samples[0], 32000, (UINT *) fread_size);
-		  printf("%u bytes read, callback result half completed -> unknown \r\n", bytesRead);
-		  callback_result = UNKNOWN;
-	  }
-
-
-	  if (played_size >= recording_size){
-		  HAL_I2S_DMAStop(&hi2s2);
-		  printf("done DMA transfer \r\n");
-		  break;
-	  }
+//	  printf("Sample: %d\r\n", sample_i2s);
+//	  HAL_Delay(10);
 
 
 
@@ -409,6 +483,25 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief Peripherals Common Clock Configuration
+  * @retval None
+  */
+void PeriphCommonClock_Config(void)
+{
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+
+  /** Initializes the peripherals clock
+  */
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_I2S;
+  PeriphClkInitStruct.PLLI2S.PLLI2SN = 96;
+  PeriphClkInitStruct.PLLI2S.PLLI2SR = 2;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
   * @brief I2S2 Initialization Function
   * @param None
   * @retval None
@@ -439,6 +532,40 @@ static void MX_I2S2_Init(void)
   /* USER CODE BEGIN I2S2_Init 2 */
 
   /* USER CODE END I2S2_Init 2 */
+
+}
+
+/**
+  * @brief I2S3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2S3_Init(void)
+{
+
+  /* USER CODE BEGIN I2S3_Init 0 */
+
+  /* USER CODE END I2S3_Init 0 */
+
+  /* USER CODE BEGIN I2S3_Init 1 */
+
+  /* USER CODE END I2S3_Init 1 */
+  hi2s3.Instance = SPI3;
+  hi2s3.Init.Mode = I2S_MODE_MASTER_RX;
+  hi2s3.Init.Standard = I2S_STANDARD_PHILIPS;
+  hi2s3.Init.DataFormat = I2S_DATAFORMAT_16B_EXTENDED;
+  hi2s3.Init.MCLKOutput = I2S_MCLKOUTPUT_DISABLE;
+  hi2s3.Init.AudioFreq = I2S_AUDIOFREQ_32K;
+  hi2s3.Init.CPOL = I2S_CPOL_LOW;
+  hi2s3.Init.ClockSource = I2S_CLOCK_PLL;
+  hi2s3.Init.FullDuplexMode = I2S_FULLDUPLEXMODE_DISABLE;
+  if (HAL_I2S_Init(&hi2s3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2S3_Init 2 */
+
+  /* USER CODE END I2S3_Init 2 */
 
 }
 
@@ -523,6 +650,9 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
+  /* DMA1_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
   /* DMA1_Stream4_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
@@ -585,6 +715,10 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s){
 
 }
 
+
+void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef * hi2s){
+	sample_i2s = data_i2s[0];
+}
 /* USER CODE END 4 */
 
 /**
