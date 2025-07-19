@@ -71,8 +71,8 @@ uint32_t played_size = 0;
 
 
 volatile CallBack_Result_t callback_result = UNKNOWN;
-volatile uint8_t dma_half_ready = 0;
-volatile uint8_t dma_full_ready = 0;
+volatile uint8_t half_ready = 0;
+volatile uint8_t full_ready = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -244,7 +244,7 @@ int main(void)
   MX_I2S2_Init();
   /* USER CODE BEGIN 2 */
 
-  printf("starting...\r\n");
+  printf("start...\r\n");
 //  testSDCard();
 
   fresult = f_mount(&fatfs, "", 1);
@@ -323,7 +323,57 @@ int main(void)
 //	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
 //	  HAL_Delay(500);
 
+//	    if (callback_result == HALF_COMPLETED) {
+//	        // refill first half of buffer
+//	    	f_read(&fil, &samples[0], 32000, (UINT *) fread_size);
+//
+//
+//	        printf("HALF         callback result half completed -> unknown \r\n");
+//	        callback_result = UNKNOWN;
+//	    }
+//	    if (callback_result == FULL_COMPLETED) {
+//	        // refill second half of buffer
+//	    	f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
+//
+//	        played_size += 32000;
+//	        printf("FULL           callback result full completed -> unknown\r\n");
+//
+//	        callback_result = UNKNOWN;
+//	    }
+//
+//	    if (played_size >= recording_size) {
+//	        HAL_I2S_DMAStop(&hi2s2);
+//	        printf("done DMA transfer \r\n");
+//	        break;
+//	    }
 
+	    if (half_ready) {
+	        half_ready = 0;
+	        UINT bytes_read = 0;
+	        f_read(&fil, &samples[0], 32000, &bytes_read);
+
+
+	        printf("half is ready, read %u bytes r\n", bytes_read);
+	    }
+
+	    if (full_ready) {
+	        full_ready = 0;
+	        UINT bytes_read = 0;
+	        f_read(&fil, &samples[16000], 32000, bytes_read);
+
+
+	        played_size += 64000;
+	        printf("full is ready, read %u bytes \r\n", fread_size);
+	    }
+
+	    if (played_size >= recording_size) {
+	        HAL_I2S_DMAStop(&hi2s2);
+	        printf("done DMA transfer\n");
+	        break;
+	    }
+
+
+	    // original video code
 //	  if (callback_result == FULL_COMPLETED){
 //		  f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
 //		  played_size += 32000;
@@ -336,29 +386,13 @@ int main(void)
 //		  printf("    callback result half completed -> unknown \r\n");
 //		  callback_result = UNKNOWN;
 //	  }
-	    if (dma_half_ready) {
-	        dma_half_ready = 0;  // clear flag
-	        f_read(&fil, samples, 32000, &fread_size);
-	        printf("Main: processed HALF\n");
-	    }
-
-	    if (dma_full_ready) {
-	        dma_full_ready = 0;  // clear flag
-	        f_read(&fil, &samples[16000], 32000, &fread_size);
-	        played_size += 32000;
-	        printf("Main: processed FULL\n");
-	    }
-
-
-
-
-
-
-	  if (played_size >= recording_size){
-		  HAL_I2S_DMAStop(&hi2s2);
-		  printf("done DMA transfer \r\n");
-		  break;
-	  }
+//
+//
+//	  if (played_size >= recording_size){
+//		  HAL_I2S_DMAStop(&hi2s2);
+//		  printf("done DMA transfer \r\n");
+//		  break;
+//	  }
 
 
 
@@ -576,9 +610,8 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s){
-	dma_half_ready = 1;
-//	callback_result = HALF_COMPLETED;
-
+	callback_result = HALF_COMPLETED;
+	half_ready = 1;
 	printf("HALF callback\r\n");
 
 }
@@ -588,8 +621,8 @@ void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s){
 void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s){
 
 	// whenever called, 32000 samples already got played
-//	callback_result = FULL_COMPLETED;
-	dma_full_ready = 1;
+	full_ready = 1;
+	callback_result = FULL_COMPLETED;
 	played_size += 32000;
 	printf("FULL callback\r\n");
 }
