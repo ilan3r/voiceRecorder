@@ -75,6 +75,7 @@ uint32_t played_size = 0;
 volatile CallBack_Result_t callback_result = UNKNOWN;
 
 
+volatile uint8_t button_flag, start_stop_recording;
 int16_t data_i2s[100];
 volatile int16_t sample_i2s;
 /* USER CODE END PV */
@@ -98,6 +99,19 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == GPIO_PIN_13)  // Replace with your pin
+    {
+        // Your interrupt handling code here
+    	char str[] = "button pressed \r\n";
+    	HAL_UART_Transmit(&huart2, (const uint8_t*) str, strlen(str), HAL_MAX_DELAY);
+
+    	button_flag = 1;
+
+    }
+}
+
 int _write(int file, char *ptr, int len) {
     HAL_UART_Transmit(&huart2, (uint8_t*)ptr, len, HAL_MAX_DELAY);
     return len;
@@ -113,25 +127,25 @@ void sd_card_init(void){
 		printf("error in mounting sd card %d \r\n", sd_result);
 	}
 	else printf("success in mounting sd card\r\n");
-
-	uint8_t file_name[] = "test.txt";
-	uint8_t temp_number;
-	uint8_t test_text[] = "hello friends\r\n";
-
-	sd_result = f_open(&testFile, (void*)file_name, FA_WRITE | FA_CREATE_ALWAYS);
-	if (sd_result != 0){
-		printf("error in creating file: %d \r\n", sd_result);
-		while(1);
-	}
-	else printf("succeeded in opening file \r\n");
-
-	sd_result = f_write(&testFile, (void*)test_text, (UINT)sizeof(test_text), (UINT)&temp_number);
-
-	if (sd_result != 0){
-		printf("error writing to the file \r\n");
-		while (1);
-	}
-	else printf("successfully wrote to file \r\n");
+//
+//	uint8_t file_name[] = "test.txt";
+//	uint8_t temp_number;
+//	uint8_t test_text[] = "hello friends\r\n";
+//
+//	sd_result = f_open(&testFile, (void*)file_name, FA_WRITE | FA_CREATE_ALWAYS);
+//	if (sd_result != 0){
+//		printf("error in creating file: %d \r\n", sd_result);
+//		while(1);
+//	}
+//	else printf("succeeded in opening file \r\n");
+//
+//	sd_result = f_write(&testFile, (void*)test_text, (UINT)sizeof(test_text), (UINT)&temp_number);
+//
+//	if (sd_result != 0){
+//		printf("error writing to the file \r\n");
+//		while (1);
+//	}
+//	else printf("successfully wrote to file \r\n");
 
 
 }
@@ -420,6 +434,21 @@ int main(void)
   while (1)
   {
 
+	  if (button_flag){
+		  if (start_stop_recording){
+			  start_stop_recording = 0;
+			  stop_recording();
+			  printf("stop recording\r\n");
+		  }
+		  else {
+			  // initial value is 0, so need to start recording at the first press
+			  start_recording(I2S_AUDIOFREQ_32K);
+			  start_stop_recording = 1;
+			  printf("start recording\r\n");
+		  }
+
+		  button_flag = 0;
+	  }
 
 //	  handleSDCardPlayback();
 
@@ -683,12 +712,22 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin : BLUE_PB_Pin */
+  GPIO_InitStruct.Pin = BLUE_PB_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(BLUE_PB_GPIO_Port, &GPIO_InitStruct);
+
   /*Configure GPIO pins : SPI1_CS_Pin LD3_Pin */
   GPIO_InitStruct.Pin = SPI1_CS_Pin|LD3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
