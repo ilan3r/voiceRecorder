@@ -47,7 +47,7 @@ typedef enum {
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
-#define WAV_WRITE_SAMPLE_COUNT 2048
+#define WAV_WRITE_SAMPLE_COUNT 1024 //number of mono samples per DMA cycle
 
 /* USER CODE END PM */
 
@@ -82,8 +82,8 @@ volatile CallBack_Result_t callback_result = UNKNOWN;
 volatile uint8_t half_i2s, full_i2s;
 
 volatile uint8_t button_flag, start_stop_recording;
-int16_t data_i2s[WAV_WRITE_SAMPLE_COUNT];
-volatile int16_t sample_i2s;
+int16_t data_i2s[WAV_WRITE_SAMPLE_COUNT*2];
+volatile int16_t mono_sample_i2s[WAV_WRITE_SAMPLE_COUNT];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -176,27 +176,43 @@ typedef struct {
     char     Subchunk2ID[4];   // "data"
     uint32_t Subchunk2Size;    // NumSamples * NumChannels * BitsPerSample/8
 } WAVHeader;
-//  0 -  3  -> "RIFF"                                  {0x52, 0x49, 0x46, 0x46}
-//  4 -  7  -> size of the file in bytes               {data_section size + 36}
-//  8 - 11  -> File type header, "WAVE"                {0x57, 0x41, 0x56, 0x45}
-// 12 - 15  -> "fmt "                                  {0x66, 0x6d, 0x74, 0x20}
-// 16 - 19  -> Length of format data                   16                  {0x10, 0x00, 0x00, 0x00}
-// 20 - 21  -> type of format, pcm is                  1                   {0x01, 0x00}
-// 22 - 23  -> number of channels                      2                   {0x02, 0x00}
-// 24 - 27  -> sample rate,                            32 kHz              {0x80, 0x7d, 0x00, 0x00}
-// 28 - 31  -> sample rate x bps x channels            19200               {0x00, 0xf4, 0x01, 0x00}
-// 32 - 33  -> bps * channels                          4                   {0x04, 0x00}
-// 34 - 35  -> bits per sample                         16                  {0x10, 0x00}
-// 36 - 39  -> "data"                                  {0x64, 0x61, 0x74, 0x61}
-// 40 - 43  -> size of the data section                {data section size}
+////  0 -  3  -> "RIFF"                                  {0x52, 0x49, 0x46, 0x46}
+////  4 -  7  -> size of the file in bytes               {data_section size + 36}
+////  8 - 11  -> File type header, "WAVE"                {0x57, 0x41, 0x56, 0x45}
+//// 12 - 15  -> "fmt "                                  {0x66, 0x6d, 0x74, 0x20}
+//// 16 - 19  -> Length of format data                   16                  {0x10, 0x00, 0x00, 0x00}
+//// 20 - 21  -> type of format, pcm is                  1                   {0x01, 0x00}
+//// 22 - 23  -> number of channels                      1                   {0x01, 0x00}
+//// 24 - 27  -> sample rate,                            32 kHz              {0x80, 0x7d, 0x00, 0x00}
+//// 28 - 31  -> sample rate x bps x channels            19200               {0x00, 0xf4, 0x01, 0x00}
+//// 32 - 33  -> bps * channels                          2                   {0x02, 0x00}
+//// 34 - 35  -> bits per sample                         16                  {0x10, 0x00}
+//// 36 - 39  -> "data"                                  {0x64, 0x61, 0x74, 0x61}
+//// 40 - 43  -> size of the data section                {data section size}
+//
+//static uint8_t wav_file_header[44] = {
+//    0x52, 0x49, 0x46, 0x46, 0xa4, 0xa9, 0x03, 0x00,
+//    0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
+//    0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+//    0x80, 0x7d, 0x00, 0x00, 0x00, 0xf4, 0x01, 0x00,
+//    0x02, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61,
+//    0x80, 0xa9, 0x03, 0x00
+//};
 
 static uint8_t wav_file_header[44] = {
-    0x52, 0x49, 0x46, 0x46, 0xa4, 0xa9, 0x03, 0x00,
-    0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
-    0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00,
-    0x80, 0x7d, 0x00, 0x00, 0x00, 0xf4, 0x01, 0x00,
-    0x04, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61,
-    0x80, 0xa9, 0x03, 0x00
+    0x52, 0x49, 0x46, 0x46,  // "RIFF"                      — ChunkID
+    0xa4, 0xa9, 0x03, 0x00,  // ChunkSize = 0x03A9A4 (240164) = file size - 8
+    0x57, 0x41, 0x56, 0x45,  // "WAVE"                      — Format
+    0x66, 0x6d, 0x74, 0x20,  // "fmt "                      — Subchunk1ID
+    0x10, 0x00, 0x00, 0x00,  // Subchunk1Size = 16          — PCM header size
+    0x01, 0x00,              // AudioFormat = 1             — PCM
+    0x01, 0x00,              // NumChannels = 1             — Mono
+    0x80, 0x7d, 0x00, 0x00,  // SampleRate = 32000          — 0x7D80
+    0x00, 0xfa, 0x00, 0x00,  // ByteRate = 128000           — should be 64000 for mono!
+    0x02, 0x00,              // BlockAlign = 2              — 2 bytes per sample (16-bit mono)
+    0x10, 0x00,              // BitsPerSample = 16
+    0x64, 0x61, 0x74, 0x61,  // "data"                      — Subchunk2ID
+    0x80, 0xa9, 0x03, 0x00   // Subchunk2Size = 0x03A980 (240128) = data size in bytes
 };
 
 
@@ -206,7 +222,7 @@ void start_recording(uint32_t frequency){
 	// 44 file header
 	// sampling rate, resolution, number of bytes, etc, number of channels
 
-	static char file_name[] = "w.wav";
+	static char file_name[] = "ww.wav";
 	static uint8_t file_counter = 1;
 	int file_number_digits = file_counter;
 
@@ -435,7 +451,7 @@ void SDcardPlaySetup(void){
 		  printf("successfully mounted\r\n");
 	  }
 
-	  fresult = f_open(&fil, "W.WAV", FA_OPEN_EXISTING | FA_READ);
+	  fresult = f_open(&fil, "WW.WAV", FA_OPEN_EXISTING | FA_READ);
 //	  fresult = f_open(&fil, "a.wav", FA_OPEN_EXISTING | FA_READ);
 	  if (fresult != FR_OK){
 		  // do something
@@ -449,7 +465,7 @@ void SDcardPlaySetup(void){
 	  // added for playing back voice recording
 	  printf("-----------------------------\r\n");
 	  FILINFO finfo;
-	  FRESULT res = f_stat("W.WAV", &finfo);
+	  FRESULT res = f_stat("WW.WAV", &finfo);
 //	  FRESULT res = f_stat("a.wav", &finfo);
 	  if (res == FR_OK) {
 	      printf("Size: %lu bytes\r\n", finfo.fsize);
@@ -691,15 +707,18 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 	if (!playback){
+
+
 		  // when first half of buffer is full, write first half to file
 		  if (start_stop_recording == 1 && half_i2s == 1){
-			  write2wave_file(  ((uint8_t *) data_i2s) , WAV_WRITE_SAMPLE_COUNT);
+
+			  write2wave_file(  (uint8_t *) mono_sample_i2s, WAV_WRITE_SAMPLE_COUNT);
 			  half_i2s = 0;
 		  }
 
 		  // when second half is full, write second half to file
 		  if (start_stop_recording == 1 && full_i2s == 1){
-			  write2wave_file(  ((uint8_t *) data_i2s) + WAV_WRITE_SAMPLE_COUNT, WAV_WRITE_SAMPLE_COUNT);
+			  write2wave_file(  (uint8_t *) &mono_sample_i2s[WAV_WRITE_SAMPLE_COUNT/2], WAV_WRITE_SAMPLE_COUNT);
 			  full_i2s = 0;
 		  }
 	}
@@ -999,11 +1018,17 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s){
 
 
 void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef * hi2s){
-	sample_i2s = data_i2s[1];
+	for (int i = 0; i < WAV_WRITE_SAMPLE_COUNT/2; i++) {
+	    mono_sample_i2s[i] = data_i2s[2 * i];  // Keep every other (left)
+	}
+
 	full_i2s = 1;
 }
 
 void HAL_I2S_RxHalfCpltCallback(I2S_HandleTypeDef * hi2s){
+	for (int i = 0; i < WAV_WRITE_SAMPLE_COUNT/2; i++) {
+	    mono_sample_i2s[WAV_WRITE_SAMPLE_COUNT/2 + i] = data_i2s[WAV_WRITE_SAMPLE_COUNT + 2 * i];  // Second half
+	}
 	half_i2s = 1;
 }
 
