@@ -47,6 +47,8 @@ typedef enum {
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
+#define WAV_WRITE_SAMPLE_COUNT 2048
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -72,11 +74,13 @@ uint32_t recording_size = 0;
 uint32_t played_size = 0;
 
 
+
 volatile CallBack_Result_t callback_result = UNKNOWN;
 
+volatile uint8_t half_i2s, full_i2s;
 
 volatile uint8_t button_flag, start_stop_recording;
-int16_t data_i2s[100];
+int16_t data_i2s[WAV_WRITE_SAMPLE_COUNT];
 volatile int16_t sample_i2s;
 /* USER CODE END PV */
 
@@ -119,7 +123,9 @@ int _write(int file, char *ptr, int len) {
 
 static FRESULT sd_result;
 static FATFS sdCard;
-static FIL testFile;
+static FIL wavFile;
+static uint8_t first_time = 0;
+static uint32_t wav_file_size;
 void sd_card_init(void){
 	sd_result = f_mount(&sdCard, "", 1);
 
@@ -151,17 +157,134 @@ void sd_card_init(void){
 }
 
 
+//  0 -  3  -> "RIFF"                                  {0x52, 0x49, 0x46, 0x46}
+//  4 -  7  -> size of the file in bytes               {data_section size + 36}
+//  8 - 11  -> File type header, "WAVE"                {0x57, 0x41, 0x56, 0x45}
+// 12 - 15  -> "fmt "                                  {0x66, 0x6d, 0x74, 0x20}
+// 16 - 19  -> Length of format data                   16                  {0x10, 0x00, 0x00, 0x00}
+// 20 - 21  -> type of format, pcm is                  1                   {0x01, 0x00}
+// 22 - 23  -> number of channels                      2                   {0x02, 0x00}
+// 24 - 27  -> sample rate,                            32 kHz              {0x80, 0x7d, 0x00, 0x00}
+// 28 - 31  -> sample rate x bps x channels            19200               {0x00, 0xf4, 0x01, 0x00}
+// 32 - 33  -> bps * channels                          4                   {0x04, 0x00}
+// 34 - 35  -> bits per sample                         16                  {0x10, 0x00}
+// 36 - 39  -> "data"                                  {0x64, 0x61, 0x74, 0x61}
+// 40 - 43  -> size of the data section                {data section size}
+
+static uint8_t wav_file_header[44] = {
+    0x52, 0x49, 0x46, 0x46, 0xa4, 0xa9, 0x03, 0x00,
+    0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
+    0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00,
+    0x80, 0x7d, 0x00, 0x00, 0x00, 0xf4, 0x01, 0x00,
+    0x04, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61,
+    0x80, 0xa9, 0x03, 0x00
+};
+
+
 void start_recording(uint32_t frequency){
+	// wave file format
+
+	// 44 file header
+	// sampling rate, resolution, number of bytes, etc, number of channels
+
+	static char file_name[] = "w_000.wav";
+	static uint8_t file_counter = 1;
+	int file_number_digits = file_counter;
+
+
+	uint32_t byte_rate = frequency * 2 * 2;
+	wav_file_header[24] = (uint8_t)frequency;
+	wav_file_header[25] = (uint8_t)(frequency >> 8);
+	wav_file_header[26] = (uint8_t)(frequency >> 16);
+	wav_file_header[27] = (uint8_t)(frequency >> 24);
+
+	wav_file_header[28] = (uint8_t)byte_rate;
+	wav_file_header[29] = (uint8_t)(byte_rate >> 8);
+	wav_file_header[30] = (uint8_t)(byte_rate >> 16);
+	wav_file_header[31] = (uint8_t)(byte_rate >> 24);
+
+
+	// defining a wave file name
+	file_name[4] = file_number_digits % 10 + 48;
+	file_number_digits /= 10;
+	file_name[3] = file_number_digits % 10 + 48;
+	file_number_digits /= 10;
+	file_name[2] = file_number_digits % 10 + 48;
+	printf("file name %s \n", file_name);
+	file_counter++;
+
+
+	// creating a file
+	sd_result = f_open(&wavFile, file_name, FA_WRITE | FA_CREATE_ALWAYS);
+	if (sd_result != 0)
+	{
+	    printf("error in creating a file: %d \n", sd_result);
+	    while(1);
+	}
+	else
+	{
+	    printf("succeeded in opening a file \n");
+	}
+
+	wav_file_size = 0;
 
 }
 
 
 void write2wave_file(uint8_t *data, uint16_t data_size){
+	uint16_t temp_number;
+	printf("w\n");
+
+
+	// change header.
+	if (first_time == 0)
+	{
+	    for (int i = 0; i < 44; i++)
+	    {
+	        *(data + i) = wav_file_header[i];
+	    }
+	    first_time = 1;
+	}
+
+
+	sd_result = f_write(&wavFile, (void *)data, data_size, (UINT*)&temp_number);
+	if (sd_result != 0)
+	{
+	    printf("error in writing to the file: %d \n", sd_result);
+	    while(1);
+	}
+	wav_file_size += data_size;
 
 }
 
 
 void stop_recording(void){
+
+	uint16_t temp_number;
+	// updating data size sector
+	wav_file_size -= 8;	// subtract 8 because don't consider first 8 bytes as part of the file
+	wav_file_header[4]  = (uint8_t)wav_file_size;
+	wav_file_header[5]  = (uint8_t)(wav_file_size >> 8);
+	wav_file_header[6]  = (uint8_t)(wav_file_size >> 16);
+	wav_file_header[7]  = (uint8_t)(wav_file_size >> 24);
+	wav_file_size -= 36;	// subtract 36 because we have 36 bytes of header before data
+	wav_file_header[40] = (uint8_t)wav_file_size;
+	wav_file_header[41] = (uint8_t)(wav_file_size >> 8);
+	wav_file_header[42] = (uint8_t)(wav_file_size >> 16);
+	wav_file_header[43] = (uint8_t)(wav_file_size >> 24);
+
+
+	// moving to the beginning of the file to update the file format
+	f_lseek(&wavFile, 0);
+	f_write(&wavFile, (void *)wav_file_header, sizeof(wav_file_header), (UINT*)&temp_number);
+	if (sd_result != 0)
+	{
+	    printf("error in updating the first sector: %d \n", sd_result);
+	    while(1);
+	}
+	f_close(&wavFile);
+	first_time = 0;
+	printf("closed the file \n");
 
 
 }
@@ -417,7 +540,6 @@ int main(void)
   MX_I2S3_Init();
   /* USER CODE BEGIN 2 */
 
-  HAL_I2S_Receive_DMA(&hi2s3, (uint16_t*) data_i2s, sizeof(data_i2s)/2); // divide by 2 to get number of samples
   HAL_Delay(500);
   sd_card_init();
 
@@ -436,6 +558,8 @@ int main(void)
 
 	  if (button_flag){
 		  if (start_stop_recording){
+
+			  HAL_I2S_DMAStop(&hi2s3);
 			  start_stop_recording = 0;
 			  stop_recording();
 			  printf("stop recording\r\n");
@@ -445,6 +569,10 @@ int main(void)
 			  start_recording(I2S_AUDIOFREQ_32K);
 			  start_stop_recording = 1;
 			  printf("start recording\r\n");
+
+
+			  HAL_I2S_Receive_DMA(&hi2s3, (uint16_t*) data_i2s, sizeof(data_i2s)/2); // divide by 2 to get number of samples
+
 		  }
 
 		  button_flag = 0;
@@ -461,6 +589,17 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  // when first half of buffer is full, write first half to file
+	  if (start_stop_recording == 1 && half_i2s == 1){
+		  write2wave_file(  ((uint8_t *) data_i2s) , WAV_WRITE_SAMPLE_COUNT);
+		  half_i2s = 0;
+	  }
+
+	  // when second half is full, write second half to file
+	  if (start_stop_recording == 1 && full_i2s == 1){
+		  write2wave_file(  ((uint8_t *) data_i2s) + WAV_WRITE_SAMPLE_COUNT, WAV_WRITE_SAMPLE_COUNT);
+		  full_i2s = 0;
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -756,8 +895,14 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s){
 
 
 void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef * hi2s){
-	sample_i2s = data_i2s[0];
+	sample_i2s = data_i2s[1];
+	full_i2s = 1;
 }
+
+void HAL_I2S_RxHalfCpltCallback(I2S_HandleTypeDef * hi2s){
+	half_i2s = 1;
+}
+
 /* USER CODE END 4 */
 
 /**
