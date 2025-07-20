@@ -73,6 +73,8 @@ uint32_t fread_size = 0;
 uint32_t recording_size = 0;
 uint32_t played_size = 0;
 
+uint8_t playback = 1;
+
 
 
 volatile CallBack_Result_t callback_result = UNKNOWN;
@@ -157,6 +159,23 @@ void sd_card_init(void){
 }
 
 
+typedef struct {
+    char     ChunkID[4];       // "RIFF"
+    uint32_t ChunkSize;        // 36 + Subchunk2Size
+    char     Format[4];        // "WAVE"
+
+    char     Subchunk1ID[4];   // "fmt "
+    uint32_t Subchunk1Size;    // 16 for PCM
+    uint16_t AudioFormat;      // 1 for PCM
+    uint16_t NumChannels;      // 1 or 2
+    uint32_t SampleRate;       // e.g., 32000
+    uint32_t ByteRate;         // SampleRate * NumChannels * BitsPerSample/8
+    uint16_t BlockAlign;       // NumChannels * BitsPerSample/8
+    uint16_t BitsPerSample;    // 8 or 16
+
+    char     Subchunk2ID[4];   // "data"
+    uint32_t Subchunk2Size;    // NumSamples * NumChannels * BitsPerSample/8
+} WAVHeader;
 //  0 -  3  -> "RIFF"                                  {0x52, 0x49, 0x46, 0x46}
 //  4 -  7  -> size of the file in bytes               {data_section size + 36}
 //  8 - 11  -> File type header, "WAVE"                {0x57, 0x41, 0x56, 0x45}
@@ -187,7 +206,7 @@ void start_recording(uint32_t frequency){
 	// 44 file header
 	// sampling rate, resolution, number of bytes, etc, number of channels
 
-	static char file_name[] = "w_000.wav";
+	static char file_name[] = "w.wav";
 	static uint8_t file_counter = 1;
 	int file_number_digits = file_counter;
 
@@ -205,11 +224,11 @@ void start_recording(uint32_t frequency){
 
 
 	// defining a wave file name
-	file_name[4] = file_number_digits % 10 + 48;
-	file_number_digits /= 10;
-	file_name[3] = file_number_digits % 10 + 48;
-	file_number_digits /= 10;
-	file_name[2] = file_number_digits % 10 + 48;
+//	file_name[4] = file_number_digits % 10 + 48;
+//	file_number_digits /= 10;
+//	file_name[3] = file_number_digits % 10 + 48;
+//	file_number_digits /= 10;
+//	file_name[2] = file_number_digits % 10 + 48;
 	printf("file name %s \n", file_name);
 	file_counter++;
 
@@ -288,6 +307,8 @@ void stop_recording(void){
 
 
 }
+
+
 
 
 
@@ -414,7 +435,8 @@ void SDcardPlaySetup(void){
 		  printf("successfully mounted\r\n");
 	  }
 
-	  fresult = f_open(&fil, "a.wav", FA_OPEN_EXISTING | FA_READ);
+	  fresult = f_open(&fil, "W.WAV", FA_OPEN_EXISTING | FA_READ);
+//	  fresult = f_open(&fil, "a.wav", FA_OPEN_EXISTING | FA_READ);
 	  if (fresult != FR_OK){
 		  // do something
 		  printf("could not read file, fresult is %d \r\n", fresult);
@@ -424,16 +446,50 @@ void SDcardPlaySetup(void){
 		  printf("successfully opened file!\r\n");
 	  }
 
+	  // added for playing back voice recording
+	  printf("-----------------------------\r\n");
+	  FILINFO finfo;
+	  FRESULT res = f_stat("W.WAV", &finfo);
+//	  FRESULT res = f_stat("a.wav", &finfo);
+	  if (res == FR_OK) {
+	      printf("Size: %lu bytes\r\n", finfo.fsize);
+	  } else {
+	      printf("f_stat failed: %d\r\n", res);
+	  }
 
-	  fresult = f_lseek(&fil, 44);
-	  if (fresult != FR_OK){
-		  // do something
-		  printf("could not seek file, fresult is %d \r\n", fresult);
-		  while (1);
+	  WAVHeader header;
+	  UINT br;
+
+	  f_lseek(&fil, 0); // Go to start
+	  if (f_read(&fil, &header, sizeof(WAVHeader), &br) != FR_OK){
+		  printf("failed to read into header\r\n");
+		  while(1);
 	  }
-	  else{
-		  printf("successfully seek within file!\r\n");
-	  }
+
+
+	  printf("ChunkID: %.4s\r\n", header.ChunkID);
+	  printf("ChunkSize: %lu\r\n", header.ChunkSize);
+	  printf("Format: %.4s\r\n", header.Format);
+
+	  printf("Subchunk1ID: %.4s\r\n", header.Subchunk1ID);
+	  printf("Subchunk1Size: %lu\r\n", header.Subchunk1Size);
+	  printf("AudioFormat: %u\r\n", header.AudioFormat);
+	  printf("NumChannels: %u\r\n", header.NumChannels);
+	  printf("SampleRate: %lu\r\n", header.SampleRate);
+	  printf("ByteRate: %lu\r\n", header.ByteRate);
+	  printf("BlockAlign: %u\r\n", header.BlockAlign);
+	  printf("BitsPerSample: %u\r\n", header.BitsPerSample);
+
+	  printf("Subchunk2ID: %.4s\r\n", header.Subchunk2ID);
+	  printf("Subchunk2Size: %lu\r\n", header.Subchunk2Size);
+
+
+
+	  printf("seeking file size......\r\n");
+	  fresult = f_lseek(&fil, 40);
+	  if (fresult != FR_OK) printf("there was an error seeking\r\n");
+
+
 
 	  fresult = f_read(&fil, &recording_size, 4, (UINT *)fread_size);
 	  if (fresult != FR_OK){
@@ -445,7 +501,43 @@ void SDcardPlaySetup(void){
 		  printf("successfully read file!\r\n");
 		  printf("the recording size is: %lu \r\n", recording_size);
 	  }
+	  printf("-----------------------------------\r\n");
+	  // end of voice recording code
 
+
+	  // from playback video, I think this was done wrong
+//	  fresult = f_lseek(&fil, 44);
+//	  if (fresult != FR_OK){
+//		  // do something
+//		  printf("could not seek file, fresult is %d \r\n", fresult);
+//		  while (1);
+//	  }
+//	  else{
+//		  printf("successfully seek within file!\r\n");
+//	  }
+//
+//	  fresult = f_read(&fil, &recording_size, 4, (UINT *)fread_size);
+//	  if (fresult != FR_OK){
+//		  // do something
+//		  printf("could not read file, fresult is %d \r\n", fresult);
+//		  while (1);
+//	  }
+//	  else{
+//		  printf("successfully read file!\r\n");
+//		  printf("the recording size is: %lu \r\n", recording_size);
+//	  }
+
+
+
+	  fresult = f_lseek(&fil, 44);
+	  if (fresult != FR_OK){
+		  // do something
+		  printf("could not seek file, fresult is %d \r\n", fresult);
+		  while (1);
+	  }
+	  else{
+		  printf("successfully seek within file!\r\n");
+	  }
 	  fresult = f_read(&fil, samples, 64000, (UINT *)fread_size);
 	  if (fresult != FR_OK){
 		  // do something
@@ -494,6 +586,7 @@ void handleSDCardPlayback(void){
   if (played_size >= recording_size){
 	  HAL_I2S_DMAStop(&hi2s2);
 	  printf("done DMA transfer \r\n");
+	  HAL_Delay(10000);
   }
 
 }
@@ -545,7 +638,9 @@ int main(void)
 
   printf("start...\r\n");
 //  testSDCard();
-//  SDcardPlaySetup();
+
+
+  if (playback) SDcardPlaySetup();
 
 
 
@@ -556,29 +651,34 @@ int main(void)
   while (1)
   {
 
-	  if (button_flag){
-		  if (start_stop_recording){
 
-			  HAL_I2S_DMAStop(&hi2s3);
-			  start_stop_recording = 0;
-			  stop_recording();
-			  printf("stop recording\r\n");
+	  if (!playback){
+		  if (button_flag){
+			  if (start_stop_recording){
+
+				  HAL_I2S_DMAStop(&hi2s3);
+				  start_stop_recording = 0;
+				  stop_recording();
+				  printf("stop recording\r\n");
+			  }
+			  else {
+				  // initial value is 0, so need to start recording at the first press
+				  start_recording(I2S_AUDIOFREQ_32K);
+				  start_stop_recording = 1;
+				  printf("start recording\r\n");
+
+
+				  HAL_I2S_Receive_DMA(&hi2s3, (uint16_t*) data_i2s, sizeof(data_i2s)/2); // divide by 2 to get number of samples
+
+			  }
+
+			  button_flag = 0;
 		  }
-		  else {
-			  // initial value is 0, so need to start recording at the first press
-			  start_recording(I2S_AUDIOFREQ_32K);
-			  start_stop_recording = 1;
-			  printf("start recording\r\n");
 
-
-			  HAL_I2S_Receive_DMA(&hi2s3, (uint16_t*) data_i2s, sizeof(data_i2s)/2); // divide by 2 to get number of samples
-
-		  }
-
-		  button_flag = 0;
 	  }
 
-//	  handleSDCardPlayback();
+
+	  if (playback) handleSDCardPlayback();
 
 //	  printf("Sample: %d\r\n", sample_i2s);
 //	  HAL_Delay(10);
@@ -589,17 +689,21 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  // when first half of buffer is full, write first half to file
-	  if (start_stop_recording == 1 && half_i2s == 1){
-		  write2wave_file(  ((uint8_t *) data_i2s) , WAV_WRITE_SAMPLE_COUNT);
-		  half_i2s = 0;
-	  }
 
-	  // when second half is full, write second half to file
-	  if (start_stop_recording == 1 && full_i2s == 1){
-		  write2wave_file(  ((uint8_t *) data_i2s) + WAV_WRITE_SAMPLE_COUNT, WAV_WRITE_SAMPLE_COUNT);
-		  full_i2s = 0;
-	  }
+	if (!playback){
+		  // when first half of buffer is full, write first half to file
+		  if (start_stop_recording == 1 && half_i2s == 1){
+			  write2wave_file(  ((uint8_t *) data_i2s) , WAV_WRITE_SAMPLE_COUNT);
+			  half_i2s = 0;
+		  }
+
+		  // when second half is full, write second half to file
+		  if (start_stop_recording == 1 && full_i2s == 1){
+			  write2wave_file(  ((uint8_t *) data_i2s) + WAV_WRITE_SAMPLE_COUNT, WAV_WRITE_SAMPLE_COUNT);
+			  full_i2s = 0;
+		  }
+	}
+
   }
   /* USER CODE END 3 */
 }
