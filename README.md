@@ -22,3 +22,9 @@ Hardware
 - MAX98357A Digital Audio Amplifier
 - 8Ω 4W Speaker
 - Micro SD Card + Micro SD Card SPI Module
+
+Resources/Tutorials
+(Learning Embedded World Youtube) https://www.youtube.com/watch?v=bbmZk5bRrR4&t=36s 
+(STM32 World Youtube) https://www.youtube.com/watch?v=rk8rMyOc76M&t=660s 
+(Steppe School Youtube) https://www.youtube.com/watch?v=NJXrJQPO7jk
+
