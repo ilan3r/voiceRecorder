@@ -1,0 +1,10 @@
+../Core/Src/audio.c:75:6:testSDCard	7
+../Core/Src/audio.c:161:6:test_speaker	3
+../Core/Src/audio.c:184:6:testMicData	1
+../Core/Src/audio.c:191:6:sd_card_init	2
+../Core/Src/audio.c:202:6:start_recording	2
+../Core/Src/audio.c:251:6:write2wave_file	4
+../Core/Src/audio.c:278:6:stop_recording	2
+../Core/Src/audio.c:309:6:handle_recording_main	5
+../Core/Src/audio.c:327:6:SDcardPlaySetup	11
+../Core/Src/audio.c:461:6:handleSDCardPlayback	4

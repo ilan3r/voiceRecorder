@@ -1,0 +1,10 @@
+../Core/Src/audio.c:75:6:testSDCard	1200	static
+../Core/Src/audio.c:161:6:test_speaker	2016	static
+../Core/Src/audio.c:184:6:testMicData	8	static
+../Core/Src/audio.c:191:6:sd_card_init	8	static
+../Core/Src/audio.c:202:6:start_recording	24	static
+../Core/Src/audio.c:251:6:write2wave_file	24	static
+../Core/Src/audio.c:278:6:stop_recording	16	static
+../Core/Src/audio.c:309:6:handle_recording_main	8	static
+../Core/Src/audio.c:327:6:SDcardPlaySetup	88	static
+../Core/Src/audio.c:461:6:handleSDCardPlayback	16	static
