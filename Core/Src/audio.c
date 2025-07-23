@@ -231,6 +231,22 @@ void SDListFiles(void){
 
 }
 
+
+void disableSpeakerCrackle(void){
+	HAL_I2S_DMAStop(&hi2s2);      // Stop ongoing DMA (if any)
+	HAL_I2S_DeInit(&hi2s2);       // Release control of PC3
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+	__HAL_RCC_GPIOC_CLK_ENABLE(); // In case it’s not enabled yet
+
+	GPIO_InitStruct.Pin = GPIO_PIN_3;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+
+	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
+}
 //////////////////////// recording data functions
 
 void sd_card_init(void){
@@ -364,8 +380,8 @@ void handle_recording_main(void){
 			  // initial value is 0, so need to start recording at the first press
 			  start_recording(I2S_AUDIOFREQ_32K);
 			  start_stop_recording = 1;
+//			  disableSpeakerCrackle();
 			  printf("start recording\r\n");
-
 
 			  HAL_I2S_Receive_DMA(&hi2s3, (uint16_t*) data_i2s, sizeof(data_i2s)/2); // divide by 2 to get number of samples
 
@@ -373,18 +389,27 @@ void handle_recording_main(void){
 
 		  button_flag = 0;
 	  }
-	  // when first half of buffer is full, write first half to file
-	  if (start_stop_recording == 1 && half_i2s == 1){
 
-		  write2wave_file(  (uint8_t *) mono_sample_i2s, WAV_WRITE_SAMPLE_COUNT);
-		  half_i2s = 0;
+	  if (start_stop_recording){
+
+		  // when first half of buffer is full, write first half to file
+		  if (half_i2s == 1){
+
+			  write2wave_file(  (uint8_t *) mono_sample_i2s, WAV_WRITE_SAMPLE_COUNT);
+			  half_i2s = 0;
+		  }
+
+		  // when second half is full, write second half to file
+		  if (full_i2s == 1){
+			  write2wave_file(  (uint8_t *) &mono_sample_i2s[WAV_WRITE_SAMPLE_COUNT/2], WAV_WRITE_SAMPLE_COUNT);
+			  full_i2s = 0;
+		  }
+
 	  }
 
-	  // when second half is full, write second half to file
-	  if (start_stop_recording == 1 && full_i2s == 1){
-		  write2wave_file(  (uint8_t *) &mono_sample_i2s[WAV_WRITE_SAMPLE_COUNT/2], WAV_WRITE_SAMPLE_COUNT);
-		  full_i2s = 0;
-	  }
+
+
+
 }
 
 

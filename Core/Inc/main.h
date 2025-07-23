@@ -64,6 +64,12 @@ void Error_Handler(void);
 #define SPI1_CS_GPIO_Port GPIOA
 #define LD3_Pin GPIO_PIN_5
 #define LD3_GPIO_Port GPIOA
+#define OK_BUTTON_Pin GPIO_PIN_8
+#define OK_BUTTON_GPIO_Port GPIOA
+#define OK_BUTTON_EXTI_IRQn EXTI9_5_IRQn
+#define BACK_BUTTON_Pin GPIO_PIN_9
+#define BACK_BUTTON_GPIO_Port GPIOA
+#define BACK_BUTTON_EXTI_IRQn EXTI9_5_IRQn
 
 /* USER CODE BEGIN Private defines */
 

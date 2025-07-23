@@ -44,6 +44,7 @@ typedef struct {
 void testSDCard(void);
 void test_speaker(void);
 void testMicData(void);
+void disableSpeakerCrackle(void);
 
 void sd_card_init(void);
 void start_recording(uint32_t frequency);

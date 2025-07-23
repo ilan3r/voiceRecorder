@@ -48,6 +48,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 I2S_HandleTypeDef hi2s2;
 I2S_HandleTypeDef hi2s3;
 DMA_HandleTypeDef hdma_spi2_tx;
@@ -80,6 +82,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_I2S2_Init(void);
 static void MX_I2S3_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef * hi2s);
@@ -99,6 +102,23 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     	HAL_UART_Transmit(&huart2, (const uint8_t*) str, strlen(str), HAL_MAX_DELAY);
 
     	button_flag = 1;
+
+    }
+
+    if (GPIO_Pin == GPIO_PIN_9)  // Replace with your pin
+    {
+        // Your interrupt handling code here
+    	char str[] = "BACK BUTTON pressed \r\n";
+    	HAL_UART_Transmit(&huart2, (const uint8_t*) str, strlen(str), HAL_MAX_DELAY);
+
+    }
+
+    if (GPIO_Pin == GPIO_PIN_8)  // Replace with your pin
+    {
+        // Your interrupt handling code here
+    	char str[] = "OK BUTTON pressed \r\n";
+    	HAL_UART_Transmit(&huart2, (const uint8_t*) str, strlen(str), HAL_MAX_DELAY);
+
 
     }
 }
@@ -150,37 +170,48 @@ int main(void)
   MX_FATFS_Init();
   MX_I2S2_Init();
   MX_I2S3_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
+  printf("starting...\r\n");
   HAL_Delay(500);
-  sd_card_init();
 
-  printf("start...\r\n");
+
+
+//  sd_card_init();
+
 //  testSDCard();
+//
+//
+//  playback = 0;
+//
+//  printf("about to go into recording loop: \r\n");
+//  while (!done_recording){
+//	  handle_recording_main();
+//  }
+//
+//
+////  MX_I2S2_Init();
+//
+//  printf("done recording, saved to file %s", recordingFile);
+//
+//  playback = 1;
+//
+//  SDcardPlaySetup(0);	// 0 means play playBackFile, 1 means play test song
+//
+//  printf("done setup, about to play file %s \r\n", playbackFile);
+//
+//
+//  while (!donePlayback){
+//	  handleSDCardPlayback();
+//  }
+//
+//  printf("done everything\r\n");
+//  while(1);
 
 
-  playback = 0;
-
-  printf("about to go into recording loop: \r\n");
-  while (!done_recording){
-	  handle_recording_main();
-  }
 
 
-  printf("done recording, saved to file %s", recordingFile);
-
-  playback = 1;
-
-  SDcardPlaySetup(0);
-  printf("done setup, about to play file %s \r\n", playbackFile);
-
-
-  while (!donePlayback){
-	  handleSDCardPlayback();
-  }
-
-  printf("done everything\r\n");
-  while(1);
 
   /* USER CODE END 2 */
 
@@ -188,7 +219,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  handleSDCardPlayback();
+	  ssd1306_TestAll();
 
 
     /* USER CODE END WHILE */
@@ -261,6 +292,40 @@ void PeriphCommonClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
@@ -458,7 +523,16 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : OK_BUTTON_Pin BACK_BUTTON_Pin */
+  GPIO_InitStruct.Pin = OK_BUTTON_Pin|BACK_BUTTON_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
   /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
