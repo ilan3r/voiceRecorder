@@ -8,6 +8,7 @@ Description:
 - (in progress) navigation menu to view and play recordings, and switch between recording and playback modes 
 
 In progress: 
+- fix crackling noise when recording 
 - adding menu navigation with display and buttons 
 - allow the user to view saved recordings and choose which one to play on the speaker
 
