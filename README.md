@@ -1,19 +1,22 @@
+Most Recent Video Demonstration:
+https://drive.google.com/file/d/16mw94ysxGs8NTSOwJuxXExVaWIpShelS/view?usp=sharing
+
 Description: 
 - real-time voice recorder module to capture a recording, save it to micro SD card, and play it back
 - uses DMA circular buffering to receive I2S Data from digital microphone while writing data to wav file on SD card 
 - uses DMA circular buffering to receive audio data from wav file on SD card while sending data to amplifier for playback
+- (in progress) navigation menu to view and play recordings, and switch between recording and playback modes 
 
 In progress: 
+- adding menu navigation with display and buttons 
 - allow the user to view saved recordings and choose which one to play on the speaker
 
 Next steps: 
-- add display to navigate through recordings 
-- add buttons (with timers/interrupts), button state tracking
-- add state machine and menu navigation
-- volume control 
+- volume control
+- use FreeRTOS 
 - use morse code and a single button to name files 
 - pause and play functionality during recording playback
-- use FreeRTOS scheduling and shared resrouces to manage 
+
 
 
 Hardware
