@@ -156,7 +156,7 @@ int main(void)
 //  testSDCard();
 
 
-  if (playback) SDcardPlaySetup();
+  if (playback) SDcardPlaySetup(0);
 
 
 
@@ -168,46 +168,10 @@ int main(void)
   {
 
 
-	  if (!playback){
-		  if (button_flag){
-			  if (start_stop_recording){
-
-				  HAL_I2S_DMAStop(&hi2s3);
-				  start_stop_recording = 0;
-				  stop_recording();
-				  printf("stop recording\r\n");
-			  }
-			  else {
-				  // initial value is 0, so need to start recording at the first press
-				  start_recording(I2S_AUDIOFREQ_32K);
-				  start_stop_recording = 1;
-				  printf("start recording\r\n");
+	  if (!playback) handle_recording_main();
 
 
-				  HAL_I2S_Receive_DMA(&hi2s3, (uint16_t*) data_i2s, sizeof(data_i2s)/2); // divide by 2 to get number of samples
-
-			  }
-
-			  button_flag = 0;
-		  }
-
-		  // when first half of buffer is full, write first half to file
-		  if (start_stop_recording == 1 && half_i2s == 1){
-
-			  write2wave_file(  (uint8_t *) mono_sample_i2s, WAV_WRITE_SAMPLE_COUNT);
-			  half_i2s = 0;
-		  }
-
-		  // when second half is full, write second half to file
-		  if (start_stop_recording == 1 && full_i2s == 1){
-			  write2wave_file(  (uint8_t *) &mono_sample_i2s[WAV_WRITE_SAMPLE_COUNT/2], WAV_WRITE_SAMPLE_COUNT);
-			  full_i2s = 0;
-		  }
-
-	  }
-
-
-	  if (playback) handleSDCardPlayback();
+	  else if (playback) handleSDCardPlayback();
 
 
     /* USER CODE END WHILE */

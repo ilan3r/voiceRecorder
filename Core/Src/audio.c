@@ -38,6 +38,7 @@ uint32_t played_size = 0;
 
 uint8_t playback = 1;
 volatile CallBack_Result_t callback_result = UNKNOWN;
+char playbackFile[] = "WW.WAV";
 
 // recording variables
 volatile uint8_t half_i2s, full_i2s;
@@ -51,6 +52,7 @@ static FATFS sdCard;
 static FIL wavFile;
 static uint8_t first_time = 0;
 static uint32_t wav_file_size;
+
 
 
 
@@ -186,6 +188,46 @@ void testMicData(void){
 	  HAL_Delay(10);
 }
 
+void SDListFiles(void){
+    // Mount the file system
+	  //some variables for FatFs
+    FATFS FatFs; 	//Fatfs handle
+    FIL fil; 		//File handle
+	FRESULT res;
+	DIR dir;
+	FILINFO fno;
+    res = f_mount(&FatFs, "", 1);  // "" means default drive, 1 means mount immediately
+    if (res != FR_OK) {
+        printf("Failed to mount filesystem. Error code: %d\r\n", res);
+        return;
+    }
+
+    // Open root directory
+    res = f_opendir(&dir, "/");
+    if (res != FR_OK) {
+        printf("Failed to open root directory. Error: %d\r\n", res);
+        return;
+    }
+
+    // Read directory entries
+    while (1) {
+        res = f_readdir(&dir, &fno);
+        if (res != FR_OK || fno.fname[0] == 0) break; // Stop on error or end of directory
+
+        if (fno.fattrib & AM_DIR) {
+            printf("Dir : %s\r\n", fno.fname);
+        } else {
+            printf("File: %s\r\n", fno.fname);
+        }
+    }
+
+    f_closedir(&dir);
+    f_mount(NULL, "", 0);
+
+    printf("\n closed directory, done listing all files \r\n");
+
+}
+
 //////////////////////// recording data functions
 
 void sd_card_init(void){
@@ -307,6 +349,27 @@ void stop_recording(void){
 }
 
 void handle_recording_main(void){
+	  if (button_flag){
+		  if (start_stop_recording){
+
+			  HAL_I2S_DMAStop(&hi2s3);
+			  start_stop_recording = 0;
+			  stop_recording();
+			  printf("stop recording\r\n");
+		  }
+		  else {
+			  // initial value is 0, so need to start recording at the first press
+			  start_recording(I2S_AUDIOFREQ_32K);
+			  start_stop_recording = 1;
+			  printf("start recording\r\n");
+
+
+			  HAL_I2S_Receive_DMA(&hi2s3, (uint16_t*) data_i2s, sizeof(data_i2s)/2); // divide by 2 to get number of samples
+
+		  }
+
+		  button_flag = 0;
+	  }
 	  // when first half of buffer is full, write first half to file
 	  if (start_stop_recording == 1 && half_i2s == 1){
 
@@ -324,7 +387,7 @@ void handle_recording_main(void){
 
 ////////////////////////////// playback functions
 
-void SDcardPlaySetup(void){
+void SDcardPlaySetup(uint8_t playSong){
 
 	  fresult = f_mount(&fatfs, "", 1);
 
@@ -337,8 +400,9 @@ void SDcardPlaySetup(void){
 		  printf("successfully mounted\r\n");
 	  }
 
-//	  fresult = f_open(&fil, "WW.WAV", FA_OPEN_EXISTING | FA_READ);
-	  fresult = f_open(&fil, "a.wav", FA_OPEN_EXISTING | FA_READ);
+
+	  if (playSong) fresult = f_open(&fil, "a.wav", FA_OPEN_EXISTING | FA_READ);
+	  else  fresult = f_open(&fil, playbackFile, FA_OPEN_EXISTING | FA_READ);
 	  if (fresult != FR_OK){
 		  // do something
 		  printf("could not read file, fresult is %d \r\n", fresult);
@@ -351,8 +415,9 @@ void SDcardPlaySetup(void){
 	  // added for playing back voice recording
 	  printf("-----------------------------\r\n");
 	  FILINFO finfo;
-	  FRESULT res = f_stat("WW.WAV", &finfo);
-//	  FRESULT res = f_stat("a.wav", &finfo);
+	  FRESULT res;
+	  if (playSong) res = f_stat("a.wav", &finfo);
+	  else res = f_stat(playbackFile, &finfo);
 	  if (res == FR_OK) {
 	      printf("Size: %lu bytes\r\n", finfo.fsize);
 	  } else {
@@ -406,28 +471,31 @@ void SDcardPlaySetup(void){
 	  printf("-----------------------------------\r\n");
 	  // end of voice recording code
 
+	  if (playSong){
+		  fresult = f_lseek(&fil, 44);
+		  if (fresult != FR_OK){
+			  // do something
+			  printf("could not seek file, fresult is %d \r\n", fresult);
+			  while (1);
+		  }
+		  else{
+			  printf("successfully seek within file!\r\n");
+		  }
+
+		  fresult = f_read(&fil, &recording_size, 4, (UINT *)fread_size);
+		  if (fresult != FR_OK){
+			  // do something
+			  printf("could not read file, fresult is %d \r\n", fresult);
+			  while (1);
+		  }
+		  else{
+			  printf("successfully read file!\r\n");
+			  printf("the recording size is: %lu \r\n", recording_size);
+		  }
+
+	  }
 
 	  // from playback video, I think this was done wrong
-	  fresult = f_lseek(&fil, 44);
-	  if (fresult != FR_OK){
-		  // do something
-		  printf("could not seek file, fresult is %d \r\n", fresult);
-		  while (1);
-	  }
-	  else{
-		  printf("successfully seek within file!\r\n");
-	  }
-
-	  fresult = f_read(&fil, &recording_size, 4, (UINT *)fread_size);
-	  if (fresult != FR_OK){
-		  // do something
-		  printf("could not read file, fresult is %d \r\n", fresult);
-		  while (1);
-	  }
-	  else{
-		  printf("successfully read file!\r\n");
-		  printf("the recording size is: %lu \r\n", recording_size);
-	  }
 
 
 

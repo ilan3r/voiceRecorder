@@ -52,7 +52,7 @@ void stop_recording(void);
 void handle_recording_main(void);
 
 
-void SDcardPlaySetup(void);
+void SDcardPlaySetup(uint8_t playSong);
 void handleSDCardPlayback(void);
 
 
