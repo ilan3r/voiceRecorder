@@ -59,13 +59,16 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
-extern volatile uint8_t button_flag, start_stop_recording;
+extern volatile uint8_t button_flag, start_stop_recording, done_recording;
 extern volatile CallBack_Result_t callback_result;
 extern uint8_t playback;
 extern volatile uint8_t half_i2s, full_i2s;
 extern volatile int16_t mono_sample_i2s[WAV_WRITE_SAMPLE_COUNT];
 extern int16_t data_i2s[WAV_WRITE_SAMPLE_COUNT*2];
 extern uint32_t played_size;
+extern char playbackFile[];
+extern char recordingFile[];
+extern uint8_t donePlayback;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -156,9 +159,28 @@ int main(void)
 //  testSDCard();
 
 
-  if (playback) SDcardPlaySetup(0);
+  playback = 0;
+
+  printf("about to go into recording loop: \r\n");
+  while (!done_recording){
+	  handle_recording_main();
+  }
 
 
+  printf("done recording, saved to file %s", recordingFile);
+
+  playback = 1;
+
+  SDcardPlaySetup(0);
+  printf("done setup, about to play file %s \r\n", playbackFile);
+
+
+  while (!donePlayback){
+	  handleSDCardPlayback();
+  }
+
+  printf("done everything\r\n");
+  while(1);
 
   /* USER CODE END 2 */
 
@@ -166,12 +188,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
-
-	  if (!playback) handle_recording_main();
-
-
-	  else if (playback) handleSDCardPlayback();
+	  handleSDCardPlayback();
 
 
     /* USER CODE END WHILE */

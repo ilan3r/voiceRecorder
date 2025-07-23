@@ -17,6 +17,7 @@
 #include "audio.h"
 #include "string.h"
 #include "fatfs.h"
+#include "stdio.h"
 
 
 
@@ -35,14 +36,16 @@ int16_t samples[WAV_READ_SAMPLE_COUNT];
 uint32_t fread_size = 0;
 uint32_t recording_size = 0;
 uint32_t played_size = 0;
+uint8_t donePlayback = 0;
 
 uint8_t playback = 1;
 volatile CallBack_Result_t callback_result = UNKNOWN;
-char playbackFile[] = "WW.WAV";
+char playbackFile[] = "DD.WAV";
+char recordingFile[] = "DD.WAV";
 
 // recording variables
 volatile uint8_t half_i2s, full_i2s;
-volatile uint8_t button_flag, start_stop_recording;
+volatile uint8_t button_flag, start_stop_recording, done_recording;
 int16_t data_i2s[WAV_WRITE_SAMPLE_COUNT*2];
 volatile int16_t mono_sample_i2s[WAV_WRITE_SAMPLE_COUNT];
 
@@ -247,7 +250,6 @@ void start_recording(uint32_t frequency){
 	// 44 file header
 	// sampling rate, resolution, number of bytes, etc, number of channels
 
-	static char file_name[] = "ww.wav";
 	static uint8_t file_counter = 1;
 	int file_number_digits = file_counter;
 
@@ -270,12 +272,12 @@ void start_recording(uint32_t frequency){
 //	file_name[3] = file_number_digits % 10 + 48;
 //	file_number_digits /= 10;
 //	file_name[2] = file_number_digits % 10 + 48;
-	printf("file name %s \n", file_name);
+	printf("file name %s \n", recordingFile);
 	file_counter++;
 
 
 	// creating a file
-	sd_result = f_open(&wavFile, file_name, FA_WRITE | FA_CREATE_ALWAYS);
+	sd_result = f_open(&wavFile, recordingFile, FA_WRITE | FA_CREATE_ALWAYS);
 	if (sd_result != 0)
 	{
 	    printf("error in creating a file: %d \n", sd_result);
@@ -355,6 +357,7 @@ void handle_recording_main(void){
 			  HAL_I2S_DMAStop(&hi2s3);
 			  start_stop_recording = 0;
 			  stop_recording();
+			  done_recording = 1;
 			  printf("stop recording\r\n");
 		  }
 		  else {
@@ -554,7 +557,7 @@ void handleSDCardPlayback(void){
   if (played_size >= recording_size){
 	  HAL_I2S_DMAStop(&hi2s2);
 	  printf("done DMA transfer \r\n");
-	  HAL_Delay(10000);
+	  donePlayback = 1;
   }
 
 }
