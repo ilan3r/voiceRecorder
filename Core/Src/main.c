@@ -161,15 +161,15 @@ int main(void)
 
   playback = 0;
 
-  printf("about to go into recording loop: \r\n");
-  while (!done_recording){
-	  handle_recording_main();
-  }
-
-
-  printf("done recording, saved to file %s", recordingFile);
-
-  playback = 1;
+//  printf("about to go into recording loop: \r\n");
+//  while (!done_recording){
+//	  handle_recording_main();
+//  }
+//
+//
+//  printf("done recording, saved to file %s", recordingFile);
+//
+//  playback = 1;
 
   SDcardPlaySetup(0);
   printf("done setup, about to play file %s \r\n", playbackFile);
@@ -482,8 +482,9 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef * hi2s){
 
 	// whenever called, 32000 samples already got played
 	callback_result = FULL_COMPLETED;
-	played_size += WAV_READ_SAMPLE_COUNT;
+//	played_size += WAV_READ_SAMPLE_COUNT;
 	printf("FULL callback\r\n");
+
 
 }
 

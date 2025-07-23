@@ -419,13 +419,17 @@ void SDcardPlaySetup(uint8_t playSong){
 	  printf("-----------------------------\r\n");
 	  FILINFO finfo;
 	  FRESULT res;
+
 	  if (playSong) res = f_stat("a.wav", &finfo);
 	  else res = f_stat(playbackFile, &finfo);
 	  if (res == FR_OK) {
-	      printf("Size: %lu bytes\r\n", finfo.fsize);
+	      printf("Size from f_stat: %lu bytes\r\n", finfo.fsize);
 	  } else {
 	      printf("f_stat failed: %d\r\n", res);
 	  }
+
+	  UINT file_size = f_size(&fil);
+	  printf("File size from f_size: %lu\r\n", file_size);
 
 	  WAVHeader header;
 	  UINT br;
@@ -471,9 +475,11 @@ void SDcardPlaySetup(uint8_t playSong){
 		  printf("successfully read file!\r\n");
 		  printf("the recording size is: %lu \r\n", recording_size);
 	  }
-	  printf("-----------------------------------\r\n");
-	  // end of voice recording code
 
+	  printf("-----------------------------------\r\n");
+	  HAL_Delay(10000);
+	  // end of voice recording code
+//	  if (playSong){
 	  if (playSong){
 		  fresult = f_lseek(&fil, 44);
 		  if (fresult != FR_OK){
@@ -537,7 +543,7 @@ void handleSDCardPlayback(void){
 	  // so ready data into second half of array
 
 //		  f_read(&fil, &samples[16000], 32000, (UINT *) fread_size);
-	  f_read(&fil, &samples[WAV_READ_SAMPLE_COUNT/2], WAV_READ_SAMPLE_COUNT, bytesRead);
+	  f_read(&fil, &samples[WAV_READ_SAMPLE_COUNT/2], WAV_READ_SAMPLE_COUNT, &bytesRead);
 	  played_size += WAV_READ_SAMPLE_COUNT;
 	  printf("%u bytes, callback result full completed -> unknown \r\n", bytesRead);
 	  callback_result = UNKNOWN;
@@ -547,7 +553,7 @@ void handleSDCardPlayback(void){
 	  UINT bytesRead = 0;
 	  // finish transmitting I2S out of first half of array
 	  // so read data into first half of array
-	  f_read(&fil, &samples[0], WAV_READ_SAMPLE_COUNT, bytesRead);
+	  f_read(&fil, &samples[0], WAV_READ_SAMPLE_COUNT, &bytesRead);
 //		  f_read(&fil, &samples[0], 32000, (UINT *) fread_size);
 	  printf("%u bytes read, callback result half completed -> unknown \r\n", bytesRead);
 	  callback_result = UNKNOWN;
