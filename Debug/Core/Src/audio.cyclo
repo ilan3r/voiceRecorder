@@ -7,5 +7,5 @@
 ../Core/Src/audio.c:295:6:write2wave_file	4
 ../Core/Src/audio.c:322:6:stop_recording	2
 ../Core/Src/audio.c:353:6:handle_recording_main	7
-../Core/Src/audio.c:393:6:SDcardPlaySetup	14
-../Core/Src/audio.c:538:6:handleSDCardPlayback	4
+../Core/Src/audio.c:393:6:SDcardPlaySetup	12
+../Core/Src/audio.c:542:6:handleSDCardPlayback	4

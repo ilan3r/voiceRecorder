@@ -161,15 +161,15 @@ int main(void)
 
   playback = 0;
 
-//  printf("about to go into recording loop: \r\n");
-//  while (!done_recording){
-//	  handle_recording_main();
-//  }
-//
-//
-//  printf("done recording, saved to file %s", recordingFile);
-//
-//  playback = 1;
+  printf("about to go into recording loop: \r\n");
+  while (!done_recording){
+	  handle_recording_main();
+  }
+
+
+  printf("done recording, saved to file %s", recordingFile);
+
+  playback = 1;
 
   SDcardPlaySetup(0);
   printf("done setup, about to play file %s \r\n", playbackFile);

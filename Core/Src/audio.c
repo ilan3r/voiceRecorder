@@ -40,8 +40,8 @@ uint8_t donePlayback = 0;
 
 uint8_t playback = 1;
 volatile CallBack_Result_t callback_result = UNKNOWN;
-char playbackFile[] = "DD.WAV";
-char recordingFile[] = "DD.WAV";
+char playbackFile[] = "GG.WAV";
+char recordingFile[] = "GG.WAV";
 
 // recording variables
 volatile uint8_t half_i2s, full_i2s;
@@ -473,40 +473,44 @@ void SDcardPlaySetup(uint8_t playSong){
 	  }
 	  else{
 		  printf("successfully read file!\r\n");
-		  printf("the recording size is: %lu \r\n", recording_size);
+
 	  }
 
-	  printf("-----------------------------------\r\n");
-	  HAL_Delay(10000);
-	  // end of voice recording code
+
 //	  if (playSong){
 	  if (playSong){
-		  fresult = f_lseek(&fil, 44);
-		  if (fresult != FR_OK){
-			  // do something
-			  printf("could not seek file, fresult is %d \r\n", fresult);
-			  while (1);
-		  }
-		  else{
-			  printf("successfully seek within file!\r\n");
-		  }
+		  // with the song, the size doesn't work, so use this
 
-		  fresult = f_read(&fil, &recording_size, 4, (UINT *)fread_size);
-		  if (fresult != FR_OK){
-			  // do something
-			  printf("could not read file, fresult is %d \r\n", fresult);
-			  while (1);
-		  }
-		  else{
-			  printf("successfully read file!\r\n");
-			  printf("the recording size is: %lu \r\n", recording_size);
-		  }
+		  recording_size = ((uint32_t) file_size) - 44;
+//		  fresult = f_lseek(&fil, 44);
+//		  if (fresult != FR_OK){
+//			  // do something
+//			  printf("could not seek file, fresult is %d \r\n", fresult);
+//			  while (1);
+//		  }
+//		  else{
+//			  printf("successfully seek within file!\r\n");
+//		  }
+//
+//		  fresult = f_read(&fil, &recording_size, 4, (UINT *)fread_size);
+//		  if (fresult != FR_OK){
+//			  // do something
+//			  printf("could not read file, fresult is %d \r\n", fresult);
+//			  while (1);
+//		  }
+//		  else{
+//			  printf("successfully read file!\r\n");
+//			  printf("the recording size is: %lu \r\n", recording_size);
+//		  }
 
 	  }
 
-	  // from playback video, I think this was done wrong
 
+	  printf("the recording size is: %lu \r\n", recording_size);
+	  printf("-----------------------------------\r\n");
+//	  HAL_Delay(10000);
 
+	  // start actually reading
 
 	  fresult = f_lseek(&fil, 44);
 	  if (fresult != FR_OK){

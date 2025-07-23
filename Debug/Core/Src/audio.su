@@ -8,4 +8,4 @@
 ../Core/Src/audio.c:322:6:stop_recording	16	static
 ../Core/Src/audio.c:353:6:handle_recording_main	8	static
 ../Core/Src/audio.c:393:6:SDcardPlaySetup	96	static
-../Core/Src/audio.c:538:6:handleSDCardPlayback	16	static
+../Core/Src/audio.c:542:6:handleSDCardPlayback	16	static
